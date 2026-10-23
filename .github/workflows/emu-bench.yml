@@ -1,0 +1,194 @@
+name: RPCS3 Emu Bench
+
+on:
+  workflow_dispatch:
+  workflow_run:
+    workflows: ["Build Sky Circuit PS3"]
+    types: [completed]
+  push:
+    branches: ["main"]
+    paths:
+      - "source/**"
+      - "Makefile"
+      - ".github/workflows/emu-bench.yml"
+
+concurrency:
+  group: emu-bench-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PS3DEV: ${{ github.workspace }}/ps3dev
+  PSL1GHT: ${{ github.workspace }}/ps3dev
+  APPID: SKYC00001
+  CONTENTID: UP0001-SKYC00001_00-0000000000000000
+  TITLE: Sky Circuit
+  RPCS3_RUN_SECONDS: "45"
+
+jobs:
+  emu-bench:
+    runs-on: ubuntu-latest
+    # Skip if parent Build workflow failed (when triggered by workflow_run)
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install host deps
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y autoconf automake bison flex gcc libelf-dev make \
+            texinfo libncurses5-dev patch python3 python-is-python3 subversion wget \
+            zlib1g-dev libtool-bin python3-dev bzip2 libgmp3-dev pkg-config git g++ \
+            libssl-dev clang xvfb xauth mesa-utils libgl1 libglib2.0-0 libxcb-cursor0 \
+            libxkbcommon0 libdbus-1-3 libpulse0 libasound2t64 curl jq unzip fuse
+
+      - name: Restore core toolchain cache
+        id: cache_core
+        uses: actions/cache/restore@v4
+        with:
+          path: ps3dev
+          key: ps3dev-core-skycircuit-v1
+
+      - name: Get / build toolchain if cache miss
+        if: steps.cache_core.outputs.cache-hit != 'true'
+        run: |
+          set -ex
+          mkdir -p "$PS3DEV" logs
+          git clone --depth=1 https://github.com/ps3dev/ps3toolchain.git ps3toolchain-src
+          cd ps3toolchain-src
+          mkdir -p /tmp/hold
+          mv scripts/*ps3libraries*.sh /tmp/hold/ || true
+          ./toolchain.sh > "${{ github.workspace }}/logs/stage-a.log" 2>&1 \
+            || { tail -n 150 "${{ github.workspace }}/logs/stage-a.log"; exit 1; }
+
+      - name: Save core toolchain cache
+        if: steps.cache_core.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ps3dev
+          key: ps3dev-core-skycircuit-v1
+
+      - name: Ensure PSL1GHT tools
+        if: steps.cache_core.outputs.cache-hit != 'true'
+        run: |
+          set -ex
+          export PATH="$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin"
+          if [ ! -x "$PS3DEV/bin/sprxlinker" ]; then
+            git clone --depth=1 https://github.com/ps3dev/PSL1GHT.git psl1ght-src
+            cd psl1ght-src && make install-ctrl && make install
+          fi
+
+      - name: Build tiny3d + game
+        run: |
+          set -ex
+          export PATH="$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin"
+          export PS3DEV PSL1GHT
+          export PORTLIBS="$PS3DEV/portlibs/ppu"
+          mkdir -p "$PORTLIBS/include" "$PORTLIBS/lib"
+          git clone --depth=1 https://github.com/wargio/tiny3D.git tiny3d-src
+          make -C tiny3d-src/lib
+          make -C tiny3d-src/lib install
+          make
+          ls -la build/ skycircuit.elf 2>/dev/null || ls -la *.elf build/*.elf 2>/dev/null || true
+
+      - name: Package SELF/PKG
+        run: |
+          set -ex
+          export PATH="$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin"
+          python3 tools/make_icon.py ICON0.PNG
+          mkdir -p build/pkg/USRDIR
+          ELF=$(find . -name 'skycircuit.elf' | head -1)
+          test -n "$ELF"
+          make_self_npdrm "$ELF" build/pkg/USRDIR/EBOOT.BIN "$CONTENTID"
+          cp ICON0.PNG build/pkg/ICON0.PNG
+          SFO=$(command -v sfo || command -v sfo.py)
+          PKG=$(command -v pkg || command -v pkg.py)
+          "$SFO" --title "$TITLE" --appid "$APPID" -f sfo.xml build/pkg/PARAM.SFO
+          "$PKG" --contentid "$CONTENTID" build/pkg build/skycircuit.pkg
+          ls -la build/skycircuit.pkg build/pkg/USRDIR/EBOOT.BIN
+
+      - name: Download RPCS3 AppImage
+        run: |
+          set -ex
+          mkdir -p rpcs3
+          # Official continuous Linux AppImage
+          curl -fL --retry 5 -o rpcs3/rpcs3.AppImage \
+            "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-master/rpcs3-linux.AppImage" \
+            || curl -fL --retry 5 -o rpcs3/rpcs3.AppImage \
+            "https://rpcs3.net/latest-appimage"
+          chmod +x rpcs3/rpcs3.AppImage
+          # Extract (no FUSE required on GHA)
+          cd rpcs3 && ./rpcs3.AppImage --appimage-extract
+          ls -la squashfs-root/usr/bin/rpcs3 || ls -la squashfs-root/
+
+      - name: Run under RPCS3 (timed) and capture logs
+        id: emu
+        env:
+          QT_QPA_PLATFORM: offscreen
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          set -e
+          RPCS3_BIN="${{ github.workspace }}/rpcs3/squashfs-root/usr/bin/rpcs3"
+          if [ ! -x "$RPCS3_BIN" ]; then
+            RPCS3_BIN=$(find rpcs3/squashfs-root -type f -name rpcs3 | head -1)
+          fi
+          test -x "$RPCS3_BIN"
+          EBOOT="${{ github.workspace }}/build/pkg/USRDIR/EBOOT.BIN"
+          test -f "$EBOOT"
+
+          mkdir -p emu-out
+          HOME_EMU="${{ github.workspace }}/emu-home"
+          mkdir -p "$HOME_EMU"
+
+          # Seed minimal config: no update check, log to file
+          mkdir -p "$HOME_EMU/.config/rpcs3"
+
+          echo "=== RPCS3 version ===" | tee emu-out/emu-bench.log
+          "$RPCS3_BIN" --version 2>&1 | tee -a emu-out/emu-bench.log || true
+
+          echo "=== Launching EBOOT for ${RPCS3_RUN_SECONDS}s ===" | tee -a emu-out/emu-bench.log
+          set +e
+          # xvfb for any GL/X paths; --no-gui boots the title window path
+          timeout "${RPCS3_RUN_SECONDS}" xvfb-run -a -s "-screen 0 1280x720x24" \
+            env HOME="$HOME_EMU" \
+            "$RPCS3_BIN" --no-gui "$EBOOT" \
+            >> emu-out/emu-bench.log 2>&1
+          RC=$?
+          set -e
+          echo "=== RPCS3 exit code: $RC (124 = timeout/expected) ===" | tee -a emu-out/emu-bench.log
+
+          # Collect RPCS3 and game logs
+          find "$HOME_EMU" -iname 'RPCS3.log*' -o -iname 'skycircuit.log' 2>/dev/null | while read -r f; do
+            echo "--- found $f ---" | tee -a emu-out/emu-bench.log
+            cp -v "$f" emu-out/ 2>/dev/null || true
+            tail -n 80 "$f" | tee -a emu-out/emu-bench.log || true
+          done
+
+          # Heuristic fail on hard crashes in log
+          if grep -Eiq 'SIGSEGV|fatal error|exception|abort|Failed to load|Invalid SELF' emu-out/emu-bench.log; then
+            echo "EMU_BENCH_RESULT=crash_or_fatal" >> "$GITHUB_OUTPUT"
+            echo "Detected fatal pattern in logs" | tee -a emu-out/emu-bench.log
+            exit 1
+          fi
+
+          # timeout (124) or clean exit after run window = pass for smoke
+          if [ "$RC" = "124" ] || [ "$RC" = "0" ]; then
+            echo "EMU_BENCH_RESULT=ok" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "EMU_BENCH_RESULT=nonzero_$RC" >> "$GITHUB_OUTPUT"
+          exit 1
+
+      - name: Upload emu logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: emu-bench-logs
+          path: |
+            emu-out/
+            build/skycircuit.pkg
+            build/pkg/USRDIR/EBOOT.BIN
+          if-no-files-found: warn
