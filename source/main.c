@@ -8,7 +8,6 @@
 #include <string.h>
 #include <sysmodule/sysmodule.h>
 #include <sysutil/sysutil.h>
-#include <sysutil/video.h>
 #include <tiny3d.h>
 
 #include "draw.h"
@@ -88,16 +87,14 @@ static void read_input(Input *in)
     prev_bits = bits;
 }
 
-static int load_modules(void)
+static void load_modules(void)
 {
     int r;
-    r = sysModuleLoad(SYSMODULE_RSX_DEVICE);
-    log_msg("sysModuleLoad RSX_DEVICE -> %d", r);
-    r = sysModuleLoad(SYSMODULE_IO);
-    log_msg("sysModuleLoad IO -> %d", r);
+    /* RSX is linked via libgcm_sys / tiny3d — no SYSMODULE_RSX_DEVICE in PSL1GHT. */
     r = sysModuleLoad(SYSMODULE_FS);
     log_msg("sysModuleLoad FS -> %d", r);
-    return 0;
+    r = sysModuleLoad(SYSMODULE_IO);
+    log_msg("sysModuleLoad IO -> %d", r);
 }
 
 int main(int argc, char **argv)

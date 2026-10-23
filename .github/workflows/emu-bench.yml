@@ -27,7 +27,6 @@ env:
 jobs:
   emu-bench:
     runs-on: ubuntu-latest
-    # Skip if parent Build workflow failed (when triggered by workflow_run)
     if: >
       github.event_name != 'workflow_run' ||
       github.event.workflow_run.conclusion == 'success'
@@ -56,7 +55,9 @@ jobs:
         if: steps.cache_core.outputs.cache-hit != 'true'
         run: |
           set -ex
-          mkdir -p "$PS3DEV" logs
+          mkdir -p "$PS3DEV/bin" "$PS3DEV/ppu/bin" "$PS3DEV/spu/bin" logs
+          export PATH="$PATH:$PS3DEV/bin:$PS3DEV/ppu/bin:$PS3DEV/spu/bin"
+          export PS3DEV PSL1GHT
           git clone --depth=1 https://github.com/ps3dev/ps3toolchain.git ps3toolchain-src
           cd ps3toolchain-src
           mkdir -p /tmp/hold
@@ -114,13 +115,11 @@ jobs:
         run: |
           set -ex
           mkdir -p rpcs3
-          # Official continuous Linux AppImage
           curl -fL --retry 5 -o rpcs3/rpcs3.AppImage \
             "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-master/rpcs3-linux.AppImage" \
             || curl -fL --retry 5 -o rpcs3/rpcs3.AppImage \
             "https://rpcs3.net/latest-appimage"
           chmod +x rpcs3/rpcs3.AppImage
-          # Extract (no FUSE required on GHA)
           cd rpcs3 && ./rpcs3.AppImage --appimage-extract
           ls -la squashfs-root/usr/bin/rpcs3 || ls -la squashfs-root/
 
@@ -141,9 +140,6 @@ jobs:
 
           mkdir -p emu-out
           HOME_EMU="${{ github.workspace }}/emu-home"
-          mkdir -p "$HOME_EMU"
-
-          # Seed minimal config: no update check, log to file
           mkdir -p "$HOME_EMU/.config/rpcs3"
 
           echo "=== RPCS3 version ===" | tee emu-out/emu-bench.log
@@ -151,7 +147,6 @@ jobs:
 
           echo "=== Launching EBOOT for ${RPCS3_RUN_SECONDS}s ===" | tee -a emu-out/emu-bench.log
           set +e
-          # xvfb for any GL/X paths; --no-gui boots the title window path
           timeout "${RPCS3_RUN_SECONDS}" xvfb-run -a -s "-screen 0 1280x720x24" \
             env HOME="$HOME_EMU" \
             "$RPCS3_BIN" --no-gui "$EBOOT" \
@@ -160,21 +155,18 @@ jobs:
           set -e
           echo "=== RPCS3 exit code: $RC (124 = timeout/expected) ===" | tee -a emu-out/emu-bench.log
 
-          # Collect RPCS3 and game logs
-          find "$HOME_EMU" -iname 'RPCS3.log*' -o -iname 'skycircuit.log' 2>/dev/null | while read -r f; do
+          find "$HOME_EMU" \( -iname 'RPCS3.log*' -o -iname 'skycircuit.log' \) 2>/dev/null | while read -r f; do
             echo "--- found $f ---" | tee -a emu-out/emu-bench.log
             cp -v "$f" emu-out/ 2>/dev/null || true
             tail -n 80 "$f" | tee -a emu-out/emu-bench.log || true
           done
 
-          # Heuristic fail on hard crashes in log
           if grep -Eiq 'SIGSEGV|fatal error|exception|abort|Failed to load|Invalid SELF' emu-out/emu-bench.log; then
             echo "EMU_BENCH_RESULT=crash_or_fatal" >> "$GITHUB_OUTPUT"
             echo "Detected fatal pattern in logs" | tee -a emu-out/emu-bench.log
             exit 1
           fi
 
-          # timeout (124) or clean exit after run window = pass for smoke
           if [ "$RC" = "124" ] || [ "$RC" = "0" ]; then
             echo "EMU_BENCH_RESULT=ok" >> "$GITHUB_OUTPUT"
             exit 0
