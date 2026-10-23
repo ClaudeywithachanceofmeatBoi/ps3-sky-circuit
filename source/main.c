@@ -21,7 +21,7 @@
  * 3 = + SetPolygon/Vertex/End (full stage 2, red rectangle)
  */
 #ifndef SUBSTAGE
-#define SUBSTAGE 2
+#define SUBSTAGE 3
 #endif
 
 static Game game;
