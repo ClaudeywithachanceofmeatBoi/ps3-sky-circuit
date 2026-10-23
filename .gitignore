@@ -1,0 +1,10 @@
+ps3dev/
+ps3toolchain-src/
+tiny3d-src/
+build/
+*.elf
+*.self
+*.pkg
+*.map
+ICON0.PNG
+logs/
