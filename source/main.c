@@ -12,7 +12,7 @@
 
 /* Debug bisect: 1 = clear+flip only, 2 = + one red rect, 3 = full game */
 #ifndef STAGE
-#define STAGE 2
+#define STAGE 3
 #endif
 
 static Game game;
