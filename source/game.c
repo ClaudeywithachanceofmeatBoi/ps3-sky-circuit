@@ -97,7 +97,81 @@ static void push_seg(Game *g, float x1, float y1, float x2, float y2, int ramp)
     s->is_ramp = ramp;
 }
 
-/* PLACEHOLDER - full file will be updated */
+static void add_wavy(Game *g, float x1, float y1, float x2, float y2, int waves)
+{
+    int steps = 30;
+    int i;
+    float dx = (x2 - x1) / (float)steps;
+    float dy = (y2 - y1) / (float)steps;
+    float nx = -dy, ny = dx;
+    float len = sqrtf(nx * nx + ny * ny);
+    float prevx, prevy;
+    if (len > 0.0001f) {
+        nx /= len;
+        ny /= len;
+    }
+    prevx = x1;
+    prevy = y1;
+    for (i = 1; i <= steps; i++) {
+        float progress = (float)i / (float)steps;
+        float offset = sinf(progress * 3.14159265f * 2.0f * (float)waves) * 100.0f;
+        float cx = x1 + dx * (float)i + nx * offset;
+        float cy = y1 + dy * (float)i + ny * offset;
+        push_seg(g, prevx, prevy, cx, cy, 0);
+        prevx = cx;
+        prevy = cy;
+    }
+}
+
+static void add_arc(Game *g, float x1, float y1, float x2, float y2, float cx, float cy)
+{
+    int steps = 25;
+    int i;
+    float prevx = x1, prevy = y1;
+    for (i = 1; i <= steps; i++) {
+        float t = (float)i / (float)steps;
+        float u = 1.0f - t;
+        float px = u * u * x1 + 2.0f * u * t * cx + t * t * x2;
+        float py = u * u * y1 + 2.0f * u * t * cy + t * t * y2;
+        push_seg(g, prevx, prevy, px, py, 0);
+        prevx = px;
+        prevy = py;
+    }
+}
+
+static void add_gap(Game *g, float x1, float y1, float x2, float y2, float gap, float min_speed)
+{
+    float mx = (x1 + x2) * 0.5f;
+    float my = (y1 + y2) * 0.5f;
+    float dx = x2 - x1, dy = y2 - y1;
+    float len = sqrtf(dx * dx + dy * dy);
+    float ndx, ndy, hx, hy;
+    if (len < 0.0001f) return;
+    ndx = dx / len;
+    ndy = dy / len;
+    hx = ndx * (gap * 0.5f);
+    hy = ndy * (gap * 0.5f);
+    push_seg(g, x1, y1, mx - hx, my - hy, 1);
+    push_seg(g, mx + hx, my + hy, x2, y2, 0);
+    if (g->ngaps < MAX_GAPS) {
+        Gap *j = &g->gaps[g->ngaps++];
+        j->x = mx - hx;
+        j->y = my - hy;
+        j->radius = 45.0f;
+        j->min_speed = min_speed;
+    }
+}
+
+static void push_bump(Game *g, float x, float y)
+{
+    if (g->nbumps >= MAX_BUMPS) return;
+    g->bumps[g->nbumps].x = x;
+    g->bumps[g->nbumps].y = y;
+    g->bumps[g->nbumps].hit_cooldown = 0;
+    g->nbumps++;
+}
+
+/* Remaining implementation truncated for size - full file next */
 void game_init(Game *g)
 {
     memset(g, 0, sizeof(*g));
