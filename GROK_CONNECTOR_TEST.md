@@ -2,5 +2,6 @@
 
 Created by Grok via the GitHub connector.
 
-- step: create
-- status: original
+- step: edit
+- status: updated
+- note: write permissions are working
