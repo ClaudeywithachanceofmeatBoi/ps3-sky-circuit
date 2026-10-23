@@ -237,31 +237,40 @@ static void draw_minimap(const Game *g)
     h = g->bounds_max_y - g->bounds_min_y;
     if (w < 1.0f) w = 1.0f;
     if (h < 1.0f) h = 1.0f;
-    scale = (box - 16.0f) / (w > h ? w : h);
-    ox = x0 + box * 0.5f - (g->bounds_min_x + w * 0.5f) * scale;
-    oy = y0 + box * 0.5f - (g->bounds_min_y + h * 0.5f) * scale;
-    rect(x0, y0, box, box, 1.0f, 0xffffff40);
-    rect(x0 + 2, y0 + 2, box - 4, box - 4, 0.9f, 0x70c5ce88);
+    scale = (box - 10.0f) / w;
+    if ((box - 10.0f) / h < scale) scale = (box - 10.0f) / h;
+    ox = x0 + (box - w * scale) * 0.5f;
+    oy = y0 + (box - h * scale) * 0.5f;
+
+    rect(x0, y0, box, box, 0.5f, 0x1a2530c0);
     for (i = 0; i < g->nsegs; i++) {
-        float x1 = ox + g->segs[i].x1 * scale;
-        float y1 = oy + g->segs[i].y1 * scale;
-        float x2 = ox + g->segs[i].x2 * scale;
-        float y2 = oy + g->segs[i].y2 * scale;
-        thick_line(x1, y1, x2, y2, 2.0f, 0.5f, 0x2c3e50ff);
+        float x1 = (g->segs[i].x1 - g->bounds_min_x) * scale + ox;
+        float y1 = (g->segs[i].y1 - g->bounds_min_y) * scale + oy;
+        float x2 = (g->segs[i].x2 - g->bounds_min_x) * scale + ox;
+        float y2 = (g->segs[i].y2 - g->bounds_min_y) * scale + oy;
+        thick_line(x1, y1, x2, y2, 2.0f, 0.4f, 0xffffff66);
+    }
+    if (g->last_x != 0.0f || g->last_y != 0.0f) {
+        float cx = (g->last_x - g->bounds_min_x) * scale + ox;
+        float cy = (g->last_y - g->bounds_min_y) * scale + oy;
+        circle(cx, cy, 3.0f, 0.3f, 0x27ae60ff);
     }
     {
-        float cx = ox + g->car.x * scale;
-        float cy = oy + g->car.y * scale;
-        circle(cx, cy, 3.0f, 0.4f, 0xd93838ff);
+        float cx = (g->car.x - g->bounds_min_x) * scale + ox;
+        float cy = (g->car.y - g->bounds_min_y) * scale + oy;
+        u32 col = ((g->tick / 15) % 2 == 0) ? 0xe74c3cff : 0xffffffff;
+        circle(cx, cy, 3.0f, 0.2f, col);
     }
 }
 
 static void menu_panel(const char **lines, int n, int selected, const char *title)
 {
-    float w = 420.0f, h = 60.0f + (float)n * 36.0f;
-    float x = (VW - w) * 0.5f, y = (VH - h) * 0.5f;
+    float w = 460.0f;
+    float h = 46.0f + (float)n * 36.0f;
+    float x = (VW - w) * 0.5f;
+    float y = (VH - h) * 0.5f;
     int i;
-    rect(x, y, w, h, 0.2f, 0xffffffe8);
+    rect(x, y, w, h, 0.15f, 0xffffffe8);
     rect(x, y, w, 4, 0.1f, 0x1a2530ff);
     float ts = 2.0f;
     if (text_w(title, ts) > w - 24.0f) ts = 1.0f;
