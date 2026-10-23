@@ -35,6 +35,20 @@ Official firmware will not run this. It is homebrew, not a Sony-signed retail pa
 
 Checkpoints save every five seconds while all four wheels are on the road.
 
+## Crash / debug log (console)
+
+On boot the game appends to **`skycircuit.log`** in both places when possible:
+
+| Path | Notes |
+|---|---|
+| `/dev_hdd0/tmp/skycircuit.log` | Always preferred; survives without USB |
+| `/dev_usb000/skycircuit.log` (…001…007) | First mounted USB root that accepts a write |
+
+Pull the log after a black screen/freeze (multiman / FTP / USB) and open an issue with the last lines.
+
 ## Pipeline
 
-`.github/workflows/build.yml` follows the known-good PSL1GHT packager path: cached `ps3toolchain` core, tiny3d, `sprxlinker`, `make_self_npdrm`, `sfo`, `pkg`. Cairo/ps3libraries are not built; this game does not need them.
+- **`build.yml`** — cached `ps3toolchain` core, tiny3d, SELF/PKG. Artifact: `sky-circuit-ps3`.
+- **`emu-bench.yml`** — builds the same package, downloads RPCS3 AppImage, boots `EBOOT.BIN` under Xvfb for ~45s, uploads `emu-bench-logs` (RPCS3 + game log tails).
+
+Cairo/ps3libraries are not built; this game does not need them.
