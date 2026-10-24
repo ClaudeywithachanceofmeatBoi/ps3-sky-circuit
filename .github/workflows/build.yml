@@ -103,9 +103,9 @@ jobs:
           export PORTLIBS="$PS3DEV/portlibs/ppu"
           mkdir -p "$PORTLIBS/include" "$PORTLIBS/lib"
           git clone --depth=1 https://github.com/wargio/tiny3D.git tiny3d-src
-          # GCC 7.2 -O2 can miscompile (ps3toolchain issue #118); build tiny3d without code hoisting
-          grep -n -- '-O2' tiny3d-src/lib/Makefile
-          sed -i 's/-O2/-O2 -fno-code-hoisting/' tiny3d-src/lib/Makefile
+          # GCC 7.2 -O2 can miscompile (ps3toolchain issue #118); build tiny3d at -O1
+          grep -n -- '-O' tiny3d-src/lib/Makefile
+          sed -i 's/-O2/-O1/' tiny3d-src/lib/Makefile
           make -C tiny3d-src/lib clean || true
           make -C tiny3d-src/lib
           make -C tiny3d-src/lib install
