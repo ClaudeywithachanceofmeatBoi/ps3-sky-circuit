@@ -10,20 +10,6 @@
 #include "draw.h"
 #include "game.h"
 
-/* Debug bisect: 1 = clear+flip only, 2 = + one red rect, 3 = full game */
-#ifndef STAGE
-#define STAGE 2
-#endif
-
-/* Only used when STAGE == 2, to isolate which call inside stage 2 hangs.
- * 1 = AlphaTest + BlendFunc only
- * 2 = + Project2D
- * 3 = + SetPolygon/Vertex/End (full stage 2, red rectangle)
- */
-#ifndef SUBSTAGE
-#define SUBSTAGE 3
-#endif
-
 static Game game;
 static unsigned prev_bits;
 
@@ -83,40 +69,21 @@ int main(int argc, char **argv)
 
     tiny3d_Init(1024 * 1024);
     ioPadInit(7);
-#if STAGE >= 3
     game_init(&game);
-#endif
 
     while (1) {
         Input in;
         tiny3d_Clear(0xff70c5ce, TINY3D_CLEAR_ALL);
 
-#if STAGE == 2
-  #if SUBSTAGE >= 1
         tiny3d_AlphaTest(1, 0x10, TINY3D_ALPHA_FUNC_GEQUAL);
         tiny3d_BlendFunc(1,
             TINY3D_BLEND_FUNC_SRC_RGB_SRC_ALPHA | TINY3D_BLEND_FUNC_SRC_ALPHA_SRC_ALPHA,
             TINY3D_BLEND_FUNC_DST_RGB_ONE_MINUS_SRC_ALPHA | TINY3D_BLEND_FUNC_DST_ALPHA_ZERO,
             TINY3D_BLEND_RGB_FUNC_ADD | TINY3D_BLEND_ALPHA_FUNC_ADD);
-  #endif
-  #if SUBSTAGE >= 2
-        tiny3d_Project2D();
-  #endif
-  #if SUBSTAGE >= 3
-        tiny3d_SetPolygon(TINY3D_QUADS);
-        tiny3d_VertexPos(300, 150, 1000); tiny3d_VertexColor(0xff0000ff);
-        tiny3d_VertexPos(550, 150, 1000); tiny3d_VertexColor(0xff0000ff);
-        tiny3d_VertexPos(550, 350, 1000); tiny3d_VertexColor(0xff0000ff);
-        tiny3d_VertexPos(300, 350, 1000); tiny3d_VertexColor(0xff0000ff);
-        tiny3d_End();
-  #endif
-#elif STAGE >= 3
+
         read_input(&in);
         game_frame(&game, &in);
         draw_frame(&game);
-#else
-        (void)in;
-#endif
 
         tiny3d_Flip();
     }
