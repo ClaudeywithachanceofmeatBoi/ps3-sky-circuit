@@ -9,6 +9,7 @@
 
 #include "draw.h"
 #include "game.h"
+#include "sound.h"
 
 static Game game;
 static unsigned prev_bits;
@@ -16,7 +17,7 @@ static unsigned prev_bits;
 static float stick_x(unsigned int raw)
 {
     float v = ((int)raw - 128) / 128.0f;
-    if (v > -0.22f && v < 0.22f) return 0.0f;
+    if (v > -0.35f && v < 0.35f) return 0.0f;
     if (v < -1.0f) v = -1.0f;
     if (v > 1.0f) v = 1.0f;
     return v;
@@ -32,10 +33,14 @@ static void read_input(Input *in)
     int got_stick = 0;
 
     memset(in, 0, sizeof(*in));
+    memset(&info, 0, sizeof(info));
     ioPadGetInfo(&info);
     for (i = 0; i < MAX_PADS; i++) {
         if (!info.status[i]) continue;
+        memset(&data, 0, sizeof(data));
         ioPadGetData(i, &data);
+        /* no fresh data this frame (len == 0): ignore this pad, don't use zeros as "stick hard left" */
+        if (data.len <= 0) continue;
         if (data.BTN_LEFT) in->left = 1;
         if (data.BTN_RIGHT) in->right = 1;
         if (data.BTN_UP) bits |= 1u;
@@ -69,6 +74,7 @@ int main(int argc, char **argv)
 
     tiny3d_Init(1024 * 1024);
     ioPadInit(7);
+    snd_init();
     game_init(&game);
 
     while (1) {

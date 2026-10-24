@@ -1,4 +1,5 @@
 #include "game.h"
+#include "sound.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -340,8 +341,13 @@ static void age_smoke(Game *g)
     }
 }
 
+static float beep_timer;
+
 static void trigger_death(Game *g, const char *reason)
 {
+    snd_screech(0.0f);
+    snd_fall();
+    snd_engine_stop();
     g->game_over = 1;
     g->stuck = 0;
     g->state = ST_DEAD;
@@ -358,6 +364,7 @@ static void launch_boost(Game *g, const Input *in)
     g->car.angle -= g->rock_wobble;
     g->car.speed = dir * g->car.max_speed * (BOOST_MULT + charge * 0.5f);
     emit_smoke(g, 3);
+    snd_boost();
 }
 
 static void save_checkpoint(Game *g)
@@ -440,9 +447,12 @@ static void simulate(Game *g, const Input *in)
             if (brake_dir > 0.0f && c->speed < 0.0f) c->speed = 0.0f;
             if (brake_dir < 0.0f && c->speed > 0.0f) c->speed = 0.0f;
             g->burnout_timer = 0.0f;
+            beep_timer = 0.0f;
         } else {
             float wiggle, shake;
             g->burnout_rocking = 1;
+            snd_screech(0.0f);
+            snd_engine(0.4f, 1);
             c->speed = 0.0f;
             wiggle = sinf((float)g->tick / 60.0f * 35.0f) * 0.4f;
             shake = cosf((float)g->tick / 60.0f * 25.0f) * 0.03f;
@@ -454,8 +464,19 @@ static void simulate(Game *g, const Input *in)
             c->y -= cosf(c->angle) * wiggle;
             emit_smoke(g, 1);
             g->burnout_timer += 1.0f / 60.0f;
+            beep_timer += 1.0f / 60.0f;
+            {
+                float prog = g->burnout_timer / TIME_TO_EXPLOSION;
+                if (prog > 1.0f) prog = 1.0f;
+                if (beep_timer >= 0.6f - prog * 0.55f) {
+                    snd_beep(prog);
+                    beep_timer = 0.0f;
+                }
+            }
             if (g->burnout_timer >= TIME_TO_EXPLOSION) {
                 g->burnout_rocking = 0;
+                snd_explosion();
+                snd_engine_stop();
                 g->explosion_anim = 0.6f;
                 g->game_over = 1;
                 snprintf(g->death_reason, sizeof(g->death_reason), "VEHICLE EXPLODED FROM BURNOUT!");
@@ -469,6 +490,7 @@ static void simulate(Game *g, const Input *in)
         }
     } else {
         g->burnout_timer = 0.0f;
+        beep_timer = 0.0f;
     }
 
     if (c->wheels >= 1 && !c->airborne && !g->stuck) {
@@ -504,6 +526,15 @@ static void simulate(Game *g, const Input *in)
 
     if (fabsf(c->speed) > c->max_speed) c->speed *= OVERSPEED_DECAY;
 
+    {
+        float asp = fabsf(c->speed);
+        int skid = (in->hbrake || both) && power > 0.0f && asp > 0.5f;
+        float lvl = asp / 3.0f;
+        if (lvl > 1.0f) lvl = 1.0f;
+        snd_screech(skid ? lvl : 0.0f);
+        snd_engine(c->speed / c->max_speed, (in->gas || in->brake) && power > 0.0f);
+    }
+
     c->x += sinf(c->angle) * c->speed;
     c->y -= cosf(c->angle) * c->speed;
 
@@ -515,6 +546,7 @@ static void simulate(Game *g, const Input *in)
             if (d < 28.0f && g->bumps[i].hit_cooldown == 0) {
                 c->speed *= 0.55f;
                 c->vertical_offset = -8.0f;
+                snd_bump();
                 g->bumps[i].hit_cooldown = 20;
             }
         }
@@ -528,9 +560,11 @@ static void simulate(Game *g, const Input *in)
             if (sp >= g->gaps[i].min_speed) {
                 c->airborne = 1;
                 c->air_timer = 28;
+                snd_jump();
             } else if (sp >= g->gaps[i].min_speed * 0.5f) {
                 c->airborne = 1;
                 c->air_timer = 12;
+                snd_jump();
             }
         }
     }
@@ -637,6 +671,10 @@ void game_frame(Game *g, const Input *in)
 {
     g->tick++;
     if (g->cp_banner > 0) g->cp_banner--;
+    if (g->state != ST_PLAY) {
+        snd_engine_stop();
+        snd_screech(0.0f);
+    }
 
     if (g->state == ST_SELECT) {
         int prev = g->menu;
