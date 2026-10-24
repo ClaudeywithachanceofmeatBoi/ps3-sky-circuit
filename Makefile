@@ -19,7 +19,7 @@ INCLUDES	:=	source
 
 LIBS		:=	-ltiny3d -lrsx -lsimdmath -lgcm_sys -lio -lsysutil -lrt -llv2 -lsysmodule -lm
 
-CFLAGS		=	-O2 -Wall -mcpu=cell $(MACHDEP) $(INCLUDE)
+CFLAGS		=	-O2 -fno-code-hoisting -Wall -mcpu=cell $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS)
 
 LDFLAGS		=	$(MACHDEP) -Wl,-Map,$(notdir $@).map
