@@ -62,13 +62,6 @@ jobs:
             || { tail -n 150 "${{ github.workspace }}/logs/stage-a.log"; exit 1; }
           mv /tmp/hold/*.sh scripts/
 
-      - name: Save core toolchain cache
-        if: steps.cache_core.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v4
-        with:
-          path: ps3dev
-          key: ps3dev-core-skycircuit-v1
-
       - name: Build PSL1GHT SDK (only if the toolchain did not include it)
         if: steps.cache_core.outputs.cache-hit != 'true'
         run: |
@@ -80,6 +73,13 @@ jobs:
             make install-ctrl
             make install
           fi
+
+      - name: Save core toolchain cache
+        if: steps.cache_core.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ps3dev
+          key: ps3dev-core-skycircuit-v1
 
       - name: Upload build logs
         if: always()
