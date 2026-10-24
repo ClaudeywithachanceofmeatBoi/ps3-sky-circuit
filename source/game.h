@@ -57,6 +57,8 @@ typedef struct {
     float scale, vertical_offset;
     int wheels;
     float front_angle, rear_angle; /* wheel angles relative to the car body (rad) */
+    int air_total;   /* length of a boost jump in frames (0 = ramp/gap jump) */
+    float air_amp;   /* boost jump height as extra scale */
 } Car;
 
 typedef struct {
@@ -93,6 +95,7 @@ typedef struct {
     float burnout_timer;
     int burnout_rocking;
     float rock_wobble;
+    float burnout_spin; /* how far the car has been spun during the current burnout (rad) */
     int exploded;
     float explosion_anim;
     float post_explosion;

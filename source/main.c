@@ -75,23 +75,23 @@ static void read_input(Input *in)
     }
 
     if (n == 1) {
-        /* One controller: R2/Cross gas, L2/Square reverse, Circle/L1/R1 handbrake, stick or D-pad steers */
+        /* One controller: R2 gas, L2 reverse, Circle/L1/R1 handbrake, stick or D-pad steers */
         const padData *d = pd[0];
-        if (d->BTN_R2 || d->BTN_CROSS) in->gas = 1;
-        if (d->BTN_L2 || d->BTN_SQUARE) in->brake = 1;
+        if (d->BTN_R2) in->gas = 1;
+        if (d->BTN_L2) in->brake = 1;
         if (d->BTN_L1) in->hbrake = 1;
         in->left = d->BTN_LEFT;
         in->right = d->BTN_RIGHT;
         in->steer = pad_steer(d);
     } else if (n >= 2) {
         /* Two controllers:
-         *   Pad 1: R2/Cross = gas,     stick/D-pad steers the FRONT wheels, L1 = reset front wheels
-         *   Pad 2: R2/Cross/L2/Square = reverse, stick/D-pad steers the REAR wheels, L1 = reset rear wheels
+         *   Pad 1: R2 = gas,     stick/D-pad steers the FRONT wheels, L1 = reset front wheels
+         *   Pad 2: R2/L2 = reverse, stick/D-pad steers the REAR wheels, L1 = reset rear wheels
          *   Circle/R1 on either pad = handbrake, Start = pause */
         const padData *a = pd[0];
         const padData *b = pd[1];
-        if (a->BTN_R2 || a->BTN_CROSS) in->gas = 1;
-        if (b->BTN_R2 || b->BTN_CROSS || b->BTN_L2 || b->BTN_SQUARE) in->brake = 1;
+        if (a->BTN_R2) in->gas = 1;
+        if (b->BTN_R2 || b->BTN_L2) in->brake = 1;
         in->left = a->BTN_LEFT;
         in->right = a->BTN_RIGHT;
         in->steer = pad_steer(a);

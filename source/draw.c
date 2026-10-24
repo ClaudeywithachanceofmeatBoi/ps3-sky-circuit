@@ -195,7 +195,7 @@ static void draw_car(const Game *g)
     u32 body;
 
     m = MatrixScale(c->scale, c->scale, 1.0f);
-    m = MatrixMultiply(m, MatrixRotationZ(c->angle));
+    m = MatrixMultiply(m, MatrixRotationZ(-c->angle));
     m = MatrixMultiply(m, MatrixTranslation(sx, sy, 0.0f));
     tiny3d_SetMatrixModelView(&m);
 
@@ -227,7 +227,7 @@ static void draw_car(const Game *g)
         for (k = 0; k < 4; k++) {
             wx = (k & 1) ? CAR_WIDTH * 0.5f + 0.5f : -CAR_WIDTH * 0.5f - 0.5f;
             wy = (k & 2) ? 26.0f : -26.0f;
-            wm = MatrixRotationZ((k & 2) ? c->rear_angle : c->front_angle);
+            wm = MatrixRotationZ(-((k & 2) ? c->rear_angle : c->front_angle));
             wm = MatrixMultiply(wm, MatrixTranslation(wx, wy, 0.0f));
             wm = MatrixMultiply(wm, m);
             tiny3d_SetMatrixModelView(&wm);
@@ -331,7 +331,7 @@ static void draw_hud(const Game *g)
             "LVL 3: THE GAUNTLET"
         };
         menu_panel(lines, 3, g->menu, "SELECT A TRACK");
-        draw_text(12, VH - 28, 1.0f, 0x1a2530ff, g->two_player ? "2 PLAYERS: P1 R2 GAS + FRONT WHEELS   P2 R2 REVERSE + REAR WHEELS   L1 RESET WHEELS" : "DPAD + CROSS    L-STICK STEER  R2/CROSS GAS  L2/SQUARE REV");
+        draw_text(12, VH - 28, 1.0f, 0x1a2530ff, g->two_player ? "2 PLAYERS: P1 R2 GAS + FRONT WHEELS   P2 R2 REVERSE + REAR WHEELS   L1 RESET WHEELS" : "DPAD + CROSS    L-STICK STEER  R2 GAS  L2 REVERSE");
     } else if (g->state == ST_PAUSE) {
         char width[32];
         const char *lines[3];

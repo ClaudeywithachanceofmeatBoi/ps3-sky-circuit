@@ -10,6 +10,10 @@
 #define CAR_LENGTH 72.0f
 #define GAP_REQ_SPEED 4.8f
 #define BOOST_MULT 2.0f
+#define BOOST_MAX_MULT 2.5f   /* the old boost: now the strongest one */
+#define BOOST_MIN_MULT 1.2f
+#define BOOST_FULL_CHARGE 4.0f /* seconds of burnout for a full boost */
+#define BOOST_SPIN_JUMP 0.5f   /* radians of spin during burnout that turn the boost into a jump */
 #define BOOST_MIN_CHARGE 0.2f
 #define OVERSPEED_DECAY 0.98f
 #define TIME_TO_EXPLOSION 5.0f
@@ -45,6 +49,8 @@ static void reset_car(Game *g, float x, float y, float angle, float speed)
     c->wheels = 4;
     c->front_angle = 0.0f;
     c->rear_angle = 0.0f;
+    c->air_total = 0;
+    c->air_amp = 0.0f;
 }
 
 static void reset_run(Game *g)
@@ -56,6 +62,7 @@ static void reset_run(Game *g)
     g->stuck = 0;
     g->stuck_time = 3.0f;
     g->burnout_timer = 0.0f;
+    g->burnout_spin = 0.0f;
     g->burnout_rocking = 0;
     g->rock_wobble = 0.0f;
     g->exploded = 0;
@@ -361,10 +368,19 @@ static void trigger_death(Game *g, const char *reason)
 static void launch_boost(Game *g, const Input *in)
 {
     float dir = (in->brake && !in->gas) ? -1.0f : 1.0f;
-    float charge = g->burnout_timer / TIME_TO_EXPLOSION;
+    float charge = g->burnout_timer / BOOST_FULL_CHARGE;
     if (charge > 1.0f) charge = 1.0f;
     g->car.angle -= g->rock_wobble;
-    g->car.speed = dir * g->car.max_speed * (BOOST_MULT + charge * 0.5f);
+    g->car.speed = dir * g->car.max_speed * (BOOST_MIN_MULT + (BOOST_MAX_MULT - BOOST_MIN_MULT) * charge);
+    if (g->burnout_spin >= BOOST_SPIN_JUMP) {
+        /* boosting out of a spin: jump, height and hang time follow the boost */
+        g->car.airborne = 1;
+        g->car.air_total = 20 + (int)(40.0f * charge);
+        g->car.air_timer = g->car.air_total;
+        g->car.air_amp = 0.3f + 0.9f * charge;
+        snd_jump();
+    }
+    g->burnout_spin = 0.0f;
     emit_smoke(g, 3);
     snd_boost();
 }
@@ -449,9 +465,10 @@ static void simulate(Game *g, const Input *in)
             if (brake_dir > 0.0f && c->speed < 0.0f) c->speed = 0.0f;
             if (brake_dir < 0.0f && c->speed > 0.0f) c->speed = 0.0f;
             g->burnout_timer = 0.0f;
+            g->burnout_spin = 0.0f;
             beep_timer = 0.0f;
         } else {
-            float wiggle, shake;
+            float wiggle, shake, st;
             g->burnout_rocking = 1;
             snd_screech(0.0f);
             snd_engine(0.4f, 1);
@@ -460,8 +477,18 @@ static void simulate(Game *g, const Input *in)
             shake = cosf((float)g->tick / 60.0f * 25.0f) * 0.03f;
             c->angle += shake;
             g->rock_wobble += shake;
-            if (in->steer < -0.2f) c->angle -= 0.012f + rnd(g) * 0.008f;
-            if (in->steer > 0.2f) c->angle += 0.012f + rnd(g) * 0.008f;
+            st = in->steer;
+            if (in->two_player && fabsf(in->steer2) > fabsf(st)) st = in->steer2;
+            if (st < -0.2f) {
+                float d = 0.012f + rnd(g) * 0.008f;
+                c->angle -= d;
+                g->burnout_spin += d;
+            }
+            if (st > 0.2f) {
+                float d = 0.012f + rnd(g) * 0.008f;
+                c->angle += d;
+                g->burnout_spin += d;
+            }
             c->x += sinf(c->angle) * wiggle;
             c->y -= cosf(c->angle) * wiggle;
             emit_smoke(g, 1);
@@ -492,6 +519,7 @@ static void simulate(Game *g, const Input *in)
         }
     } else {
         g->burnout_timer = 0.0f;
+        g->burnout_spin = 0.0f;
         beep_timer = 0.0f;
     }
 
@@ -616,9 +644,13 @@ static void simulate(Game *g, const Input *in)
 
     if (c->airborne) {
         c->air_timer--;
-        c->scale = 1.0f + sinf(((float)c->air_timer / 28.0f) * 3.14159265f) * 0.4f;
+        if (c->air_total > 0)
+            c->scale = 1.0f + sinf(((float)(c->air_total - c->air_timer) / (float)c->air_total) * 3.14159265f) * c->air_amp;
+        else
+            c->scale = 1.0f + sinf(((float)c->air_timer / 28.0f) * 3.14159265f) * 0.4f;
         if (c->air_timer <= 0) {
             c->airborne = 0;
+            c->air_total = 0;
             c->scale = 1.0f;
         }
     }
