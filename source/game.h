@@ -44,7 +44,9 @@ typedef struct {
 
 typedef struct {
     int left, right, gas, brake, hbrake;
-    float steer; /* -1 left .. +1 right */
+    float steer;  /* -1 left .. +1 right (player 1: front wheels) */
+    float steer2; /* player 2: rear wheels */
+    int two_player, reset1, reset2;
     int press_up, press_down, press_confirm, press_pause, press_triangle;
 } Input;
 
@@ -54,6 +56,7 @@ typedef struct {
     int airborne, air_timer;
     float scale, vertical_offset;
     int wheels;
+    float front_angle, rear_angle; /* wheel angles relative to the car body (rad) */
 } Car;
 
 typedef struct {
@@ -62,6 +65,7 @@ typedef struct {
     int menu;
     int half_road;
     int game_over;
+    int two_player;
     int paused;
 
     Car car;

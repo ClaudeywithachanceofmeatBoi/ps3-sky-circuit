@@ -27,7 +27,7 @@ static void rect(float x, float y, float w, float h, float z, u32 col)
 static void circle(float cx, float cy, float r, float z, u32 col)
 {
     int i;
-    const int n = 12;
+    const int n = r > 12.0f ? 24 : 12;
     tiny3d_SetPolygon(TINY3D_TRIANGLE_FAN);
     tiny3d_VertexPos(cx, cy, z);
     tiny3d_VertexColor(col);
@@ -110,7 +110,9 @@ static void draw_road(const Game *g)
         to_screen(g, s->x1 + 15.0f, s->y1 + 15.0f, &x1, &y1);
         to_screen(g, s->x2 + 15.0f, s->y2 + 15.0f, &x2, &y2);
         if (!seg_visible(x1, y1, x2, y2, width)) continue;
-        thick_line(x1, y1, x2, y2, width + 8.0f, 40.0f, 0x142d4640);
+        thick_line(x1, y1, x2, y2, width + 8.0f, 40.0f, 0x599facff);
+        circle(x1, y1, (width + 8.0f) * 0.5f, 40.0f, 0x599facff);
+        circle(x2, y2, (width + 8.0f) * 0.5f, 40.0f, 0x599facff);
     }
     for (i = 0; i < g->nsegs; i++) {
         float x1, y1, x2, y2;
@@ -119,7 +121,11 @@ static void draw_road(const Game *g)
         to_screen(g, s->x2, s->y2, &x2, &y2);
         if (!seg_visible(x1, y1, x2, y2, width)) continue;
         thick_line(x1, y1, x2, y2, width, 30.0f, 0x2c3e50ff);
+        circle(x1, y1, width * 0.5f, 30.0f, 0x2c3e50ff);
+        circle(x2, y2, width * 0.5f, 30.0f, 0x2c3e50ff);
         thick_line(x1, y1, x2, y2, 4.0f, 20.0f, 0xe74c3cff);
+        circle(x1, y1, 2.0f, 20.0f, 0xe74c3cff);
+        circle(x2, y2, 2.0f, 20.0f, 0xe74c3cff);
         {
             float dx = x2 - x1, dy = y2 - y1;
             float len = hypotf(dx, dy);
@@ -213,6 +219,22 @@ static void draw_car(const Game *g)
     }
 
     local_rect(-CAR_WIDTH * 0.5f + 4.0f, -CAR_LENGTH * 0.5f + 4.0f, CAR_WIDTH, CAR_LENGTH, 5, 0x0000004c);
+    {
+        /* wheels: rear pair fixed, front pair turned by the steering angle */
+        MATRIX wm;
+        float wx, wy;
+        int k;
+        for (k = 0; k < 4; k++) {
+            wx = (k & 1) ? CAR_WIDTH * 0.5f + 0.5f : -CAR_WIDTH * 0.5f - 0.5f;
+            wy = (k & 2) ? 26.0f : -26.0f;
+            wm = MatrixRotationZ((k & 2) ? c->rear_angle : c->front_angle);
+            wm = MatrixMultiply(wm, MatrixTranslation(wx, wy, 0.0f));
+            wm = MatrixMultiply(wm, m);
+            tiny3d_SetMatrixModelView(&wm);
+            local_rect(-3.0f, -7.0f, 6.0f, 14.0f, 4.5f, 0x0a0a0aff);
+        }
+        tiny3d_SetMatrixModelView(&m);
+    }
     flash = (g->danger || g->stuck || g->burnout_rocking) && ((g->tick / 15) % 2 == 0);
     body = flash ? 0xd93838ff : 0x1b365dff;
     local_rect(-CAR_WIDTH * 0.5f, -CAR_LENGTH * 0.5f, CAR_WIDTH, CAR_LENGTH, 4, body);
@@ -309,7 +331,7 @@ static void draw_hud(const Game *g)
             "LVL 3: THE GAUNTLET"
         };
         menu_panel(lines, 3, g->menu, "SELECT A TRACK");
-        draw_text(12, VH - 28, 1.0f, 0x1a2530ff, "DPAD + CROSS    L-STICK STEER  R2/CROSS GAS  L2/SQUARE REV");
+        draw_text(12, VH - 28, 1.0f, 0x1a2530ff, g->two_player ? "2 PLAYERS: P1 R2 GAS + FRONT WHEELS   P2 R2 REVERSE + REAR WHEELS   L1 RESET WHEELS" : "DPAD + CROSS    L-STICK STEER  R2/CROSS GAS  L2/SQUARE REV");
     } else if (g->state == ST_PAUSE) {
         char width[32];
         const char *lines[3];

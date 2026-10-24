@@ -43,6 +43,8 @@ static void reset_car(Game *g, float x, float y, float angle, float speed)
     c->scale = 1.0f;
     c->vertical_offset = 0.0f;
     c->wheels = 4;
+    c->front_angle = 0.0f;
+    c->rear_angle = 0.0f;
 }
 
 static void reset_run(Game *g)
@@ -493,9 +495,37 @@ static void simulate(Game *g, const Input *in)
         beep_timer = 0.0f;
     }
 
-    if (c->wheels >= 1 && !c->airborne && !g->stuck) {
-        float dir = c->speed >= 0.0f ? 1.0f : -1.0f;
-        c->angle += c->turn_speed * dir * in->steer;
+    if (in->two_player) {
+        /* Two players: P1 steers the front wheels, P2 the rear wheels. Wheels stay where they are
+         * pointed until turned again or reset (only possible while the car is stationary). */
+        const float rate = 0.045f, lim = 1.5708f;
+        int still = fabsf(c->speed) < 0.3f;
+        if (in->reset1 && still) {
+            if (c->front_angle > 0.12f) c->front_angle -= 0.12f;
+            else if (c->front_angle < -0.12f) c->front_angle += 0.12f;
+            else c->front_angle = 0.0f;
+        } else {
+            c->front_angle += in->steer * rate;
+        }
+        if (in->reset2 && still) {
+            if (c->rear_angle > 0.12f) c->rear_angle -= 0.12f;
+            else if (c->rear_angle < -0.12f) c->rear_angle += 0.12f;
+            else c->rear_angle = 0.0f;
+        } else {
+            c->rear_angle += in->steer2 * rate;
+        }
+        if (c->front_angle > lim) c->front_angle = lim;
+        if (c->front_angle < -lim) c->front_angle = -lim;
+        if (c->rear_angle > lim) c->rear_angle = lim;
+        if (c->rear_angle < -lim) c->rear_angle = -lim;
+    } else {
+        /* Single player: tight-cornering steering, the car can turn on the spot (same as the HTML). */
+        c->front_angle = in->steer * 0.5f;
+        c->rear_angle = 0.0f;
+        if (c->wheels >= 1 && !c->airborne && !g->stuck) {
+            float dir = c->speed >= 0.0f ? 1.0f : -1.0f;
+            c->angle += c->turn_speed * dir * in->steer;
+        }
     }
 
     power = (c->airborne || g->stuck) ? 0.0f : (float)c->wheels / 4.0f;
@@ -535,8 +565,23 @@ static void simulate(Game *g, const Input *in)
         snd_engine(c->speed / c->max_speed, (in->gas || in->brake) && power > 0.0f);
     }
 
-    c->x += sinf(c->angle) * c->speed;
-    c->y -= cosf(c->angle) * c->speed;
+    if (in->two_player) {
+        /* Rolling speed acts along each wheel set's heading; the body follows the average:
+         * same angle = sideways slide, opposite angles = spin, facing each other = no movement. */
+        float sf = sinf(c->front_angle), cf = cosf(c->front_angle);
+        float sr = sinf(c->rear_angle), cr = cosf(c->rear_angle);
+        float vx = c->speed * (sf + sr) * 0.5f;
+        float vy = c->speed * (cf + cr) * 0.5f;
+        float dth = c->speed * (sf - sr) / 52.0f;
+        if (dth > 0.09f) dth = 0.09f;
+        if (dth < -0.09f) dth = -0.09f;
+        if (c->wheels >= 1 && !c->airborne && !g->stuck) c->angle += dth;
+        c->x += sinf(c->angle) * vy + cosf(c->angle) * vx;
+        c->y += -cosf(c->angle) * vy + sinf(c->angle) * vx;
+    } else {
+        c->x += sinf(c->angle) * c->speed;
+        c->y -= cosf(c->angle) * c->speed;
+    }
 
     if (!c->airborne) {
         for (i = 0; i < g->nbumps; i++) {
@@ -670,6 +715,7 @@ static void menu_move(Game *g, const Input *in, int count)
 void game_frame(Game *g, const Input *in)
 {
     g->tick++;
+    g->two_player = in->two_player;
     if (g->cp_banner > 0) g->cp_banner--;
     if (g->state != ST_PLAY) {
         snd_engine_stop();

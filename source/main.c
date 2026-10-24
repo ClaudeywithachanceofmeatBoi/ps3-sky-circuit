@@ -23,42 +23,83 @@ static float stick_x(unsigned int raw)
     return v;
 }
 
+/* PS3 pads only report new data when something changed (len == 0 otherwise),
+ * so keep the last good state per pad and use that while nothing new arrives. */
+static padData last_data[MAX_PADS];
+static int have_data[MAX_PADS];
+
+static float pad_steer(const padData *d)
+{
+    float s = stick_x(d->ANA_L_H);
+    if (d->BTN_LEFT) s = -1.0f;
+    if (d->BTN_RIGHT) s = 1.0f;
+    return s;
+}
+
 static void read_input(Input *in)
 {
     padInfo info;
-    padData data;
-    int i;
+    const padData *pd[2] = { 0, 0 };
+    int i, n = 0;
     unsigned bits = 0;
-    float steer = 0.0f;
-    int got_stick = 0;
 
     memset(in, 0, sizeof(*in));
     memset(&info, 0, sizeof(info));
     ioPadGetInfo(&info);
     for (i = 0; i < MAX_PADS; i++) {
-        if (!info.status[i]) continue;
-        memset(&data, 0, sizeof(data));
-        ioPadGetData(i, &data);
-        /* no fresh data this frame (len == 0): ignore this pad, don't use zeros as "stick hard left" */
-        if (data.len <= 0) continue;
-        if (data.BTN_LEFT) in->left = 1;
-        if (data.BTN_RIGHT) in->right = 1;
-        if (data.BTN_UP) bits |= 1u;
-        if (data.BTN_DOWN) bits |= 2u;
-        if (data.BTN_CROSS) bits |= 4u;
-        if (data.BTN_START) bits |= 8u;
-        if (data.BTN_TRIANGLE) bits |= 16u;
-        if (data.BTN_CROSS || data.BTN_R2) in->gas = 1;
-        if (data.BTN_SQUARE || data.BTN_L2) in->brake = 1;
-        if (data.BTN_CIRCLE || data.BTN_L1) in->hbrake = 1;
-        if (!got_stick) {
-            steer = stick_x(data.ANA_L_H);
-            got_stick = 1;
+        padData fresh;
+        if (!info.status[i]) {
+            have_data[i] = 0;
+            continue;
         }
+        memset(&fresh, 0, sizeof(fresh));
+        ioPadGetData(i, &fresh);
+        if (fresh.len > 0) {
+            last_data[i] = fresh;
+            have_data[i] = 1;
+        }
+        if (!have_data[i]) continue;
+        if (n < 2) pd[n] = &last_data[i];
+        n++;
     }
-    if (in->left) steer = -1.0f;
-    if (in->right) steer = 1.0f;
-    in->steer = steer;
+    in->two_player = (n >= 2);
+
+    for (i = 0; i < n && i < 2; i++) {
+        const padData *d = pd[i];
+        if (d->BTN_UP) bits |= 1u;
+        if (d->BTN_DOWN) bits |= 2u;
+        if (d->BTN_CROSS) bits |= 4u;
+        if (d->BTN_START) bits |= 8u;
+        if (d->BTN_TRIANGLE) bits |= 16u;
+        if (d->BTN_CIRCLE || d->BTN_R1) in->hbrake = 1;
+    }
+
+    if (n == 1) {
+        /* One controller: R2/Cross gas, L2/Square reverse, Circle/L1/R1 handbrake, stick or D-pad steers */
+        const padData *d = pd[0];
+        if (d->BTN_R2 || d->BTN_CROSS) in->gas = 1;
+        if (d->BTN_L2 || d->BTN_SQUARE) in->brake = 1;
+        if (d->BTN_L1) in->hbrake = 1;
+        in->left = d->BTN_LEFT;
+        in->right = d->BTN_RIGHT;
+        in->steer = pad_steer(d);
+    } else if (n >= 2) {
+        /* Two controllers:
+         *   Pad 1: R2/Cross = gas,     stick/D-pad steers the FRONT wheels, L1 = reset front wheels
+         *   Pad 2: R2/Cross/L2/Square = reverse, stick/D-pad steers the REAR wheels, L1 = reset rear wheels
+         *   Circle/R1 on either pad = handbrake, Start = pause */
+        const padData *a = pd[0];
+        const padData *b = pd[1];
+        if (a->BTN_R2 || a->BTN_CROSS) in->gas = 1;
+        if (b->BTN_R2 || b->BTN_CROSS || b->BTN_L2 || b->BTN_SQUARE) in->brake = 1;
+        in->left = a->BTN_LEFT;
+        in->right = a->BTN_RIGHT;
+        in->steer = pad_steer(a);
+        in->steer2 = pad_steer(b);
+        in->reset1 = a->BTN_L1;
+        in->reset2 = b->BTN_L1;
+    }
+
     in->press_up = (bits & 1u) && !(prev_bits & 1u);
     in->press_down = (bits & 2u) && !(prev_bits & 2u);
     in->press_confirm = (bits & 4u) && !(prev_bits & 4u);
