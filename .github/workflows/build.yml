@@ -42,7 +42,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ps3dev
-          key: ps3dev-core-skycircuit-v1
+          key: ps3dev-core-skycircuit-v2
 
       - name: Get ps3toolchain
         if: steps.cache_core.outputs.cache-hit != 'true'
@@ -79,7 +79,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ps3dev
-          key: ps3dev-core-skycircuit-v1
+          key: ps3dev-core-skycircuit-v2
 
       - name: Upload build logs
         if: always()
