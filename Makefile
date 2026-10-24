@@ -17,7 +17,7 @@ BUILD		:=	build
 SOURCES		:=	source
 INCLUDES	:=	source
 
-LIBS		:=	-ltiny3d -lrsx -lsimdmath -lgcm_sys -lio -lsysutil -lrt -llv2 -lsysmodule -lm
+LIBS		:=	-ltiny3d -lrsx -lsimdmath -lgcm_sys -lio -laudio -lsysutil -lrt -llv2 -lsysmodule -lm
 
 CFLAGS		=	-O1 -Wall -mcpu=cell $(MACHDEP) $(INCLUDE)
 CXXFLAGS	=	$(CFLAGS)
